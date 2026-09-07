@@ -1,0 +1,31 @@
+# XUI Cracker Enhanced - Default Username Wordlist
+# ================================================
+# Common usernames for 3X-UI panels
+
+admin
+root
+administrator
+user
+test
+demo
+xui
+3xui
+xray
+v2ray
+panel
+admin1
+admin123
+superadmin
+sysadmin
+manager
+operator
+support
+service
+api
+node
+server
+proxy
+vpn
+client
+guest
+master

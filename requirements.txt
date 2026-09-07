@@ -1,0 +1,14 @@
+# XUI Cracker Enhanced - Requirements
+# ===================================
+# Core dependencies for the toolkit
+
+requests>=2.28.0
+
+# Optional: For enhanced terminal colors on Windows
+# colorama>=0.4.6
+
+# Note: All other functionality uses Python 3.8+ standard library
+# No external database or GUI frameworks required!
+
+# Python version requirement
+python>=3.8

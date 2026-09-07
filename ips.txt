@@ -1,0 +1,12 @@
+# XUI Cracker Enhanced - Sample Target List
+# ==========================================
+# Format: IP:PORT or http://host:port
+# One target per line
+
+# Examples:
+# 192.168.1.1:443
+# example.com:2053
+# https://target.com:8443
+# 10.0.0.1:443
+
+# Add your targets below:
