@@ -1,4 +1,4 @@
-# 🔥 XUI CRACKER ENHANCED v3.0
+# 🔥 XUI SECURITY TOOLKIT v3.0 - ALL-IN-ONE SUITE
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-3.0-blue?style=for-the-badge" alt="Version">
@@ -11,13 +11,22 @@
   <img src="https://img.shields.io/badge/Purpose-Security%20Testing-orange?style=for-the-badge" alt="Purpose">
   <img src="https://img.shields.io/badge/Target-3X--UI%20Panel-purple?style=for-the-badge" alt="Target">
   <img src="https://img.shields.io/badge/Multi%20Thread-Yes-success?style=for-the-badge" alt="Multi-thread">
+  <img src="https://img.shields.io/badge/Scanner-✅-green?style=for-the-badge" alt="Scanner">
+  <img src="https://img.shields.io/badge/Cracker-✅-green?style=for-the-badge" alt="Cracker">
 </p>
 
 ---
 
-## 🎯 What is XUI Cracker Enhanced?
+## 🎯 What is XUI Security Toolkit?
 
-**XUI Cracker Enhanced** is an **advanced security toolkit** designed for testing the security of [3X-UI](https://github.com/MHSanaei/3x-ui) panels - popular web interfaces for managing Xray-core proxy servers.
+**XUI Security Toolkit** is a **complete all-in-one security suite** for testing [3X-UI](https://github.com/MHSanaei/3x-ui) panels. It includes:
+
+### 📦 Included Tools:
+| Tool | File | Description |
+|------|------|-------------|
+| **🔍 XUI Scanner Pro** | `xui_scanner.py` | Find & detect 3X-UI panels on any IP |
+| **🔓 XUI Cracker Enhanced** | `xui_cracker.py` | Crack panel credentials |
+| **⚡ Main Toolkit** | `toolkit.py` | All-in-one launcher with menu |
 
 ### ⚠️ Disclaimer
 
@@ -33,9 +42,21 @@
 
 ---
 
-## ✨ Features (v3.0 Enhanced)
+## ✨ Features (v3.0 Complete Suite)
 
-### 🔓 Attack Modes
+### 📡 XUI Scanner Pro v2.0 - NEW!
+| Feature | Description |
+|---------|-------------|
+| **Multi-Port Scanning** | 2053, 443, 8443, 2083, 81, 8080... |
+| **Fast TCP Scanner** | Quick port check before HTTP |
+| **3X-UI Fingerprinting** | Detects 3X-UI specific patterns |
+| **Version Detection** | Extracts panel version |
+| **Vulnerability Assessment** | Finds security issues |
+| **Auto-Export for Cracker** | One-click export to cracker format |
+| **Bulk IP Support** | CIDR, ranges, lists |
+| **Beautiful Live UI** | Real-time statistics |
+
+### 🔓 XUI Cracker Enhanced v3.0
 | Mode | Description | Speed |
 |------|-------------|-------|
 | **Standard Brute Force** | Custom wordlist attack | ⚡⚡⚡ |
